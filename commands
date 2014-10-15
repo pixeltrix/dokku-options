@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -eo pipefail; [[ $DOKKU_TRACE ]] && set -x
+
+CMD=$1
+[[ $CMD ]] && {
+  shift
+  APP=$1
+  [[ $APP ]] && {
+    shift
+    OPTIONS_STRING="$@"
+  }
+}
+
+# Check if application is specified
+if [[ $CMD == options ]] || [[ $CMD == options:* ]]; then
+  if [[ ! $APP ]]; then
+    echo "You must specify an app name"
+    exit 1
+  else
+    OPTIONS_FILE="OPTIONS"
+    OPTIONS_FILE_PATH="$DOKKU_ROOT/$APP/$OPTIONS_FILE"
+
+    # Check if app exists with the same name
+    if [ ! -d "$DOKKU_ROOT/$APP" ]; then
+      echo "App $APP does not exist"
+      exit 1
+    fi
+
+    [ -f $OPTIONS_FILE_PATH ] || {
+      touch $OPTIONS_FILE_PATH
+    }
+  fi
+fi
+
+case "$CMD" in
+  # Display applications docker options
+  options)
+
+    if [ ! -f $OPTIONS_FILE_PATH ] || [ ! -s $OPTIONS_FILE_PATH ] ; then
+      echo "$APP has no docker options"
+      exit 1
+    fi
+
+    cat $OPTIONS_FILE_PATH
+  ;;
+
+  # Add a docker option to application
+  options:add)
+    if [[ ! $OPTIONS_STRING ]]; then
+      echo "Usage: dokku options:add <app> OPTIONS_STRING"
+      echo "Must specify an OPTIONS_STRING to add."
+      exit 1
+    fi
+
+    echo "$OPTIONS_STRING" >> $OPTIONS_FILE_PATH
+    OPTIONS_TEMP=`cat $OPTIONS_FILE_PATH`
+    echo -e "$OPTIONS_TEMP" | sed '/^$/d' | sort -u > $OPTIONS_FILE_PATH
+  ;;
+
+  # Remove a docker option from application
+  options:remove)
+    if [[ ! $OPTIONS_STRING ]]; then
+      echo "Usage: dokku options:remove <app> OPTIONS_STRING"
+      echo "Must specify OPTIONS_STRING to remove."
+      exit 1
+    fi
+
+    OPTIONS_TEMP=`cat "${OPTIONS_FILE_PATH}"`
+    OPTIONS_TEMP=$(echo -e "${OPTIONS_TEMP}" | sed "s#${OPTIONS_STRING}##")
+    echo -e "$OPTIONS_TEMP" | sed '/^$/d' | sort -u > $OPTIONS_FILE_PATH
+  ;;
+
+  # Display usage help
+  help)
+    cat && cat<<EOF
+    options <app>                            display options for an app
+    options:add <app> OPTIONS_STRING         add an option string for an app
+    options:remove <app> OPTIONS_STRING      remove an option string from an app
+EOF
+  ;;
+
+esac
